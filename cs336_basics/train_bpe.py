@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import regex
 import re
 from collections import Counter
@@ -68,7 +69,7 @@ def train_bpe(
 
     # Pre-tokenize and count word frequencies
     word_in_bytes_counter: dict[tuple[bytes, ...], int] = Counter()
-    for part in text_parts:
+    for part in tqdm(text_parts, desc="Pretokenizing"):
         if part in special_tokens:
             # Because we split the text on special tokens, we need to skip them here
             continue
@@ -180,12 +181,13 @@ def _merge(ids: list[int], pair: tuple[int, int], idx: int) -> tuple[int, ...]:
 # Example usage and testing
 if __name__ == "__main__":
     # Train BPE
+    corpus_path = Path("data/TinyStoriesV2-GPT4-train.txt")
+    
     vocab, merges = train_bpe(
-        input_path=Path("data/TinyStoriesV2-GPT4-train.txt"),
+        input_path=corpus_path,
         vocab_size=10000,  # 1 special + 256 bytes + 43 merges
         special_tokens=["<|endoftext|>"],
     )
 
-    print(f"\nVocabulary size: {len(vocab)}")
-    print(f"Number of merges: {len(merges)}")
-    print(merges)
+    Path("cs336_basics/vocab.json").write_text(json.dumps(vocab, indent=2), encoding="utf-8")
+    Path("cs336_basics/merges.json").write_text(json.dumps(merges, indent=2), encoding="utf-8")

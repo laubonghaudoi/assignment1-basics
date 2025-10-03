@@ -178,6 +178,21 @@ def _merge(ids: list[int], pair: tuple[int, int], idx: int) -> tuple[int, ...]:
     return tuple(new_ids)
 
 
+def _bytes_to_text(blob: bytes) -> str:
+    """Round-trip safe conversion from bytes to text for JSON serialization."""
+    return blob.decode("latin-1")
+
+
+def _serialize_vocab(vocab: dict[int, bytes]) -> dict[str, str]:
+    """Convert vocab byte values to JSON-safe strings keyed by token id."""
+    return {str(idx): _bytes_to_text(token_bytes) for idx, token_bytes in vocab.items()}
+
+
+def _serialize_merges(merges: list[tuple[bytes, bytes]]) -> list[list[str]]:
+    """Convert merge byte pairs into JSON-safe list of string pairs."""
+    return [[_bytes_to_text(left), _bytes_to_text(right)] for left, right in merges]
+
+
 # Example usage and testing
 if __name__ == "__main__":
     # Train BPE
@@ -189,5 +204,11 @@ if __name__ == "__main__":
         special_tokens=["<|endoftext|>"],
     )
 
-    Path("cs336_basics/vocab.json").write_text(json.dumps(vocab, indent=2), encoding="utf-8")
-    Path("cs336_basics/merges.json").write_text(json.dumps(merges, indent=2), encoding="utf-8")
+    Path("cs336_basics/vocab.json").write_text(
+        json.dumps(_serialize_vocab(vocab), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    Path("cs336_basics/merges.json").write_text(
+        json.dumps(_serialize_merges(merges), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )

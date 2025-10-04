@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import json
+import os
 import regex
 import re
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Iterator
 from tqdm import tqdm
 
 
@@ -28,10 +31,63 @@ def _split_on_special_tokens(text: str, special_tokens: list[str]) -> list[str]:
     return [part for part in parts if part]
 
 
+def _stream_text_parts(input_path: Path, special_tokens: list[str]) -> Iterator[str]:
+    tokens = special_tokens or []
+    prefixes = {token[:i] for token in tokens for i in range(1, len(token))}
+    buffer = ""
+
+    with input_path.open("r", encoding="utf-8") as handle:
+        for chunk in handle:
+            buffer += chunk
+            parts = _split_on_special_tokens(buffer, tokens)
+            if parts and parts[-1] not in tokens and parts[-1] in prefixes:
+                buffer = parts.pop()
+            else:
+                buffer = ""
+
+            for part in parts:
+                yield part
+
+    if buffer:
+        yield from _split_on_special_tokens(buffer, tokens)
+
+
+def _batched_parts(
+    input_path: Path, special_tokens: list[str], batch_size: int
+) -> Iterator[list[str]]:
+    batch: list[str] = []
+    for part in _stream_text_parts(input_path, special_tokens):
+        batch.append(part)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+
+    if batch:
+        yield batch
+
+
+def _count_pretokens_chunk(payload: tuple[list[str], tuple[str, ...]]) -> Counter[tuple[bytes, ...]]:
+    parts, special_tokens = payload
+    tokens = set(special_tokens)
+    counter: Counter[tuple[bytes, ...]] = Counter()
+
+    for part in parts:
+        if part in tokens:
+            continue
+        for pretoken in regex.findall(PAT, part):
+            byte_tuple = tuple(bytes([b]) for b in pretoken.encode("utf-8"))
+            counter[byte_tuple] += 1
+
+    return counter
+
+
 def train_bpe(
     input_path: str,
     vocab_size: int,
     special_tokens: list[str],
+    *,
+    num_workers: int | None = None,
+    batch_size: int = 2048,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """
     Train a byte-level BPE tokenizer on the given corpus.
@@ -40,12 +96,15 @@ def train_bpe(
         input_path: Path to the text file containing training data
         vocab_size: Total desired vocabulary size (including special tokens and bytes)
         special_tokens: list of special tokens to add to vocabulary
+        num_workers: number of parallel workers used during pre-tokenization (None => cpu count)
+        batch_size: number of text segments processed per worker task
 
     Returns:
         - vocab: dict mapping token IDs to their byte representations
         - merges: list of merge operations (pairs of bytes that were merged)
     """
     input_path = Path(input_path)
+    special_tokens = special_tokens or []
 
     # Step 1: Initialize vocabulary with special tokens and all bytes
     vocab: dict[int, bytes] = {}
@@ -62,22 +121,28 @@ def train_bpe(
         next_id += 1
 
     # Step 2: Read and pre-tokenize the corpus
-    print(f"Reading corpus from {input_path}...")
-    text: str = Path(input_path).read_text(encoding="utf-8")
-    # Split on special tokens to prevent cross-boundary merging
-    text_parts: list[str] = _split_on_special_tokens(text, special_tokens)
+    print(f"Streaming corpus from {input_path}...")
 
     # Pre-tokenize and count word frequencies
+    worker_count = 1 if num_workers == 1 else (num_workers or os.cpu_count() or 1)
     word_in_bytes_counter: dict[tuple[bytes, ...], int] = Counter()
-    for part in tqdm(text_parts, desc="Pretokenizing"):
-        if part in special_tokens:
-            # Because we split the text on special tokens, we need to skip them here
-            continue
-        else:
-            # Apply regex pre-tokenization
-            pretokens = regex.findall(PAT, part)
-            for pretoken in pretokens:
-                # Convert to tuple of bytes objects (not individual byte values)
+
+    if worker_count > 1:
+        payloads = (
+            (batch, tuple(special_tokens))
+            for batch in _batched_parts(input_path, special_tokens, batch_size)
+        )
+        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+            for chunk_counter in tqdm(
+                executor.map(_count_pretokens_chunk, payloads, chunksize=1),
+                desc="Pretokenizing",
+            ):
+                word_in_bytes_counter.update(chunk_counter)
+    else:
+        for part in tqdm(_stream_text_parts(input_path, special_tokens), desc="Pretokenizing"):
+            if part in special_tokens:
+                continue
+            for pretoken in regex.findall(PAT, part):
                 byte_tuple = tuple(bytes([b]) for b in pretoken.encode("utf-8"))
                 word_in_bytes_counter[byte_tuple] += 1
 
@@ -196,11 +261,11 @@ def _serialize_merges(merges: list[tuple[bytes, bytes]]) -> list[list[str]]:
 # Example usage and testing
 if __name__ == "__main__":
     # Train BPE
-    corpus_path = Path("data/TinyStoriesV2-GPT4-train.txt")
+    corpus_path = Path("data/owt_train.txt")
     
     vocab, merges = train_bpe(
         input_path=corpus_path,
-        vocab_size=10000,  # 1 special + 256 bytes + 43 merges
+        vocab_size=32000,  # 1 special + 256 bytes + 43 merges
         special_tokens=["<|endoftext|>"],
     )
 

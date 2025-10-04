@@ -87,7 +87,7 @@ def train_bpe(
     special_tokens: list[str],
     *,
     num_workers: int | None = None,
-    batch_size: int = 2048,
+    batch_size: int = 16384,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """
     Train a byte-level BPE tokenizer on the given corpus.

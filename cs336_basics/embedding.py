@@ -1,6 +1,5 @@
 import torch
 from jaxtyping import Array, Float
-import einx
 from torch.nn.init import trunc_normal_
 
 class Embedding(torch.nn.Module):

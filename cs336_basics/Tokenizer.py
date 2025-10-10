@@ -56,7 +56,7 @@ class Tokenizer:
                 break
 
             merged = best_pair[0] + best_pair[1]
-            pieces = pieces[:best_pos] + [merged] + pieces[best_pos + 2:]
+            pieces = pieces[:best_pos] + [merged] + pieces[best_pos + 2 :]
 
         return pieces
 
@@ -72,9 +72,7 @@ class Tokenizer:
         merges_data = json.loads(Path(merges_filepath).read_text(encoding="utf-8"))
 
         vocab = {int(idx): _text_to_bytes(token) for idx, token in vocab_data.items()}
-        merges = [
-            (_text_to_bytes(left), _text_to_bytes(right)) for left, right in merges_data
-        ]
+        merges = [(_text_to_bytes(left), _text_to_bytes(right)) for left, right in merges_data]
 
         return cls(vocab=vocab, merges=merges, special_tokens=special_tokens)
 
@@ -109,11 +107,7 @@ class Tokenizer:
         """
         Encode a string into a list of token IDs.
         """
-        segments = (
-            _split_on_special_tokens(text, list(self.special_tokens))
-            if self.special_tokens
-            else [text]
-        )
+        segments = _split_on_special_tokens(text, list(self.special_tokens)) if self.special_tokens else [text]
         token_ids: list[int] = []
         for segment in segments:
             if segment in self.special_tokens:

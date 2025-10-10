@@ -1,6 +1,7 @@
 import torch
-from jaxtyping import Array, Float
+from jaxtyping import Float
 from torch.nn.init import trunc_normal_
+
 
 class Embedding(torch.nn.Module):
     def __init__(
@@ -11,13 +12,13 @@ class Embedding(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        self.num_embeddings = num_embeddings
-        self.embedding_dim = embedding_dim
-        self.W: Float[Array, "num_embeddings embedding_dim"] = torch.nn.Parameter(
+        self.num_embeddings: int = num_embeddings
+        self.embedding_dim: int = embedding_dim
+        self.W: Float[torch.Tensor, "num_embeddings embedding_dim"] = torch.nn.Parameter(
             torch.empty((num_embeddings, embedding_dim), device=device, dtype=dtype)
         )
 
-    def forward(self, token_ids: torch.Tensor) -> Float[Array, "..."]:
+    def forward(self, token_ids: torch.Tensor) -> Float[torch.Tensor, "..."]:
         return self.W[token_ids]
 
 

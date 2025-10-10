@@ -1,9 +1,9 @@
 import torch
-from jaxtyping import Array, Float
+from jaxtyping import Float
 from torch import Tensor
 import torch.nn.functional as F
 import einx
-from cs336_basics.linear import Linear
+
 
 class SwiGLU(torch.nn.Module):
     def __init__(
@@ -14,8 +14,9 @@ class SwiGLU(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        self.d_model = d_model
-        self.d_ff = d_ff
+
+        self.d_model: int = d_model
+        self.d_ff: int = d_ff
         self.w1: Float[Tensor, "d_ff d_model"] = torch.nn.Parameter(
             torch.randn((d_ff, d_model), device=device, dtype=dtype)
         )

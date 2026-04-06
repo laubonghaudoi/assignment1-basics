@@ -20,6 +20,7 @@ from cs336_basics.rope import RoPE
 from cs336_basics.softmax import Softmax
 from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
 from cs336_basics.multihead_self_attention import CausalMultiHeadSelfAttention
+from cs336_basics.transformer_block import TransformerBlock
 
 
 def run_linear(
@@ -318,7 +319,22 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+
+    combined_weight = torch.cat(
+        [weights["attn.q_proj.weight"], weights["attn.k_proj.weight"], weights["attn.v_proj.weight"]], dim=0
+    )
+    rope = RoPE(theta, d_model // num_heads, max_seq_len)
+
+    transformer_block = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
+    transformer_block.self_attn.w_qkv.W.data = combined_weight
+    transformer_block.self_attn.output_proj.W.data = weights["attn.output_proj.weight"]
+    transformer_block.ln1.weight.data = weights["ln1.weight"]
+    transformer_block.ln2.weight.data = weights["ln2.weight"]
+    transformer_block.ffn.w1.data = weights["ffn.w1.weight"]
+    transformer_block.ffn.w2.data = weights["ffn.w2.weight"]
+    transformer_block.ffn.w3.data = weights["ffn.w3.weight"]
+
+    return transformer_block(in_features, rope)
 
 
 def run_transformer_lm(
